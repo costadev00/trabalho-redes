@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
   while (1) {
     
     memset(oBuf, 0, MAXDATASIZE);
-    printf("Input: ");
+    printf("> ");
     fgets(oBuf, MAXDATASIZE - 1, stdin);
     oBuf[strlen(oBuf) - 1] = 0;
 

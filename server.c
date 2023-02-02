@@ -21,17 +21,12 @@
 
 #define BACKLOG 10 // how many pending connections queue will hold
 
-typedef struct user {
-  char nome[50];
-  int fd;
-} user;
-
 void sigchld_handler(int s) {
   while (waitpid(-1, NULL, WNOHANG) > 0)
     ;
 }
 
-int login(char *user, char *pass, int fd, struct user **logons) {
+int login(char *user, char *pass) {
   FILE *f = fopen("login.fms", "r");
   int r = 0;
   char sUser[50], sPass[50];
@@ -44,16 +39,23 @@ int login(char *user, char *pass, int fd, struct user **logons) {
     }
     fclose(f);
     if (r) {
-      r = 0;
-      for (int i = 0; i < MAXDATASIZE; i++) {
-        if (logons[i] == NULL) {
-          r = 1;
-          logons[i] = malloc(sizeof(user));
-          logons[i]->fd = fd;
-          strcpy(logons[i]->nome, user);
+      int c = 0;
+      f = fopen("logados.fms", "r+");
+      if (f == NULL)
+        return 0;
+      while (fscanf(f, " %s", sUser) != EOF) {
+        if (strcmp(sUser, user) == 0) {
+          printf("%s\n", sUser);
+          fprintf(f, " ON\n");
+          c = 1;
           break;
         }
+        fscanf(f, " %s", sUser);
       }
+      if (!c) {
+        fprintf(f, "%s ON\n", user);
+      }
+      fclose(f);
     }
   }
   if (r) {
@@ -94,59 +96,63 @@ int registerUser(char *user, char *pass) {
   return r;
 }
 
-int is_loged(int fd,user **logons) {
+int is_loged(char *user) {
   int r = 0;
-  for (int i = 0; i < MAXDATASIZE; i++) {
-    if (logons[i] != NULL) {
-      if (logons[i]->fd == fd)
+  char sUser[50];
+  FILE *f = fopen("logados.fms", "r");
+  if (f == NULL)
+    return 0;
+  while (fscanf(f, " %s", sUser) != EOF) {
+    if (strcmp(sUser, user) == 0) {
+      fscanf(f, " %s", sUser);
+      if (strcmp(sUser, "ON") == 0) {
         r = 1;
-    }
-  }
-  return r;
-}
-
-int get_login(char *name,user **logons) {
-  int r = -1;
-  for (int i = 0; i < MAXDATASIZE; i++) {
-    if (logons[i] != NULL) {
-      if (!strcmp(name, logons[i]->nome))
-        r = logons[i]->fd;
-    }
-  }
-  return r;
-}
-
-void sendMsg(char *dest, char *msg,user **logons) {
-  int fd = get_login(dest,logons);
-  if (fd != -1) {
-    if (write(fd, msg, strlen(msg)) == -1) {
-      perror("Sending");
-      close(fd);
-      // sleep(3);
-      exit(-1);
-    }
-  }
-}
-
-void logout(int fd,user **logons) {
-  for (int i = 0; i < MAXDATASIZE; i++) {
-    if (logons[i] != NULL) {
-      if (logons[i]->fd == fd) {
-        free(logons[i]);
-        logons[i] = NULL;
       }
+      break;
     }
   }
+  fclose(f);
+  return r;
 }
 
-void listUser(int fd,user **logons) {
+void sendMsg(char *dest, char *msg, char *rem) {
+  FILE *f = fopen(dest, "a");
+  if (f == NULL) {
+    return;
+  }
+  fprintf(f, "%s %s\n", rem, msg);
+  fclose(f);
+}
+
+void logout(char *user) {
+  char sUser[50];
+  FILE *f = fopen("logados.fms", "r+");
+  if (f == NULL)
+    return;
+  while (fscanf(f, " %s", sUser) != EOF) {
+    if (strcmp(sUser, user) == 0) {
+      fprintf(f, " OF\n");
+      fscanf(f, " %s", sUser);
+      break;
+    }
+  }
+  fclose(f);
+}
+
+void listUser(int fd) {
   char msg[10002] = "\n";
-  for (int i = 0; i < MAXDATASIZE; i++) {
-    if (logons[i] != NULL) {
-      strcat(msg, logons[i]->nome);
+  char sUser[50], st[3];
+  FILE *f = fopen("logados.fms", "r+");
+  if (f == NULL)
+    return;
+  while (fscanf(f, " %s %s", sUser, st) != EOF) {
+    printf("%s %s\n", sUser, st);
+    if (strcmp(st, "ON") == 0) {
+      strcat(msg, sUser);
       strcat(msg, "\n");
     }
   }
+  fclose(f);
   if (write(fd, msg, strlen(msg)) == -1) {
     perror("Sending");
     close(fd);
@@ -154,6 +160,41 @@ void listUser(int fd,user **logons) {
     exit(-1);
   }
 }
+
+void receber(char *user, int fd) {
+  FILE *f = fopen(user, "r");
+  char msgs[16000] = "\n";
+  if (f != NULL) {
+    char msg[210];
+    while (fgets(msg, 210, f)) {
+      strcat(msgs, msg);
+      // puts(msg);
+    }
+    fclose(f);
+    f = fopen(user, "w+");
+    fclose(f);
+  }
+  if (write(fd, msgs, strlen(msgs)) == -1) {
+    perror("Sending");
+    close(fd);
+    // sleep(3);
+    exit(-1);
+  }
+}
+
+/*void delete(int fd,user **logons){
+  FILE *f = fopen("login.fms", "r");
+  if(f==NULL)return;
+  char user[50],pss[50];
+  int pos = is_loged(fd, logons);
+  while(fscanf(f, " %s %s",user,pss)){
+    if(strcmp(user,logons[pos]->nome)){
+      int len = strlen(user) + strlen(pss)+1;
+
+    }
+  }
+  logout(fd, logons);
+}*/
 
 int main(int argc, char **argv) {
   int sockfd, new_fd;            // listen on sock_fd, new connection on new_fd
@@ -165,7 +206,7 @@ int main(int argc, char **argv) {
   int myPort;
   int retVal;
   char buf[MAXDATASIZE];
-  user *logons[MAXDATASIZE] = {NULL};
+  char usr[50] = "";
 
   if (argc != 2) {
     fprintf(stderr, "Usage: %s <Port Number>\n", argv[0]);
@@ -233,14 +274,18 @@ int main(int argc, char **argv) {
           char op[10];
           sscanf(buf, " %s", op);
           if (!strcmp(op, "quit")) {
-            if (!is_loged(new_fd,logons))
+            if (!is_loged(usr))
               strcpy(resp, "quit");
             else
               strcpy(resp, "Voce esta logado");
           } else if (!strcmp(op, "login")) {
             char user[50], pass[50];
             sscanf(buf + 5, " %s %s", user, pass);
-            if (login(user, pass, new_fd,logons)) {
+            if (strlen(usr)) {
+              strcpy(resp, "Você já está logado");
+            } else if (login(user, pass)) {
+              strcpy(usr, user);
+              receber(usr, new_fd);
               strcpy(resp, "Usuario Logado");
             } else {
               strcpy(resp, "Falha no Login");
@@ -257,8 +302,8 @@ int main(int argc, char **argv) {
             char dest[50];
             char msg[100];
             sscanf(buf + 4, " %s %[^\n]s", dest, msg);
-            if (is_loged(new_fd,logons)) {
-              sendMsg(dest, msg,logons);
+            if (strlen(usr)) {
+              sendMsg(dest, msg, usr);
               strcpy(resp, "Mensagem encaminhada");
             } else {
               strcpy(resp, "Faça login primeiro");
@@ -266,17 +311,31 @@ int main(int argc, char **argv) {
           } else if (!strcmp(op, "isOnline")) {
             char user[50];
             sscanf(buf + 8, " %s", user);
-            if (get_login(user,logons) != -1) {
+            if (is_loged(user)) {
               strcpy(resp, "Online");
             } else {
               strcpy(resp, "Offline");
             }
           } else if (!strcmp(op, "listUsers")) {
-            listUser(new_fd,logons);
+            listUser(new_fd);
             strcpy(resp, "\0");
           } else if (!strcmp(op, "logout")) {
-            logout(new_fd,logons);
+            logout(usr);
+            strcpy(usr, "");
             strcpy(resp, "Logoff realizado");
+          } else if (!strcmp(op, "recive")) {
+            if (strlen(usr)) {
+              receber(usr, new_fd);
+              strcpy(resp, "\0");
+            }
+            strcpy(resp, "Faça login primeiro");
+          }
+          /*else if (!strcmp(op, "apagar")){
+            delete(new_fd,logons);
+            strcpy(resp, "Usuario Apagado");
+          }*/
+          else {
+            strcpy(resp, " ");
           }
         }
         if ((retVal = write(new_fd, resp, strlen(resp))) == -1) {
