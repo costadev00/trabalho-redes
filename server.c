@@ -92,6 +92,10 @@ int registerUser(char *user, char *pass) {
       fprintf(f, "%s registred\n", user);
       fclose(f);
     }
+    f = fopen(user, "w+");
+    if (f != NULL) {
+      fclose(f);
+    }
   }
   return r;
 }
@@ -137,6 +141,11 @@ void logout(char *user) {
     }
   }
   fclose(f);
+  f = fopen("log.fms", "a");
+  if (f != NULL) {
+    fprintf(f, "Logoff: %s\n", user);
+    fclose(f);
+  }
 }
 
 void listUser(int fd) {
@@ -286,7 +295,7 @@ int main(int argc, char **argv) {
             } else if (login(user, pass)) {
               strcpy(usr, user);
               receber(usr, new_fd);
-              strcpy(resp, "Usuario Logado");
+              strcpy(resp, "Logado");
             } else {
               strcpy(resp, "Falha no Login");
             }

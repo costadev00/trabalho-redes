@@ -15,7 +15,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-
 #define PORT 3490 // the port client will be connecting to
 
 #define MAXDATASIZE 100 // max number of bytes we can get at once
@@ -67,7 +66,7 @@ int main(int argc, char *argv[]) {
   their_addr.sin_addr = *((struct in_addr *)he->h_addr);
   memset(&(their_addr.sin_zero), '\0', 8); // zero the rest of the struct
 
-  printf("Going to be connected ....\n");
+  printf("Going to be connected...\n");
 
   if (connect(sockfd, (struct sockaddr *)&their_addr,
               sizeof(struct sockaddr)) == -1) {
@@ -76,9 +75,11 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  char usr[50] = "";
+
   printf("Connected ....\n");
   while (1) {
-    
+
     memset(oBuf, 0, MAXDATASIZE);
     printf("> ");
     fgets(oBuf, MAXDATASIZE - 1, stdin);
@@ -87,9 +88,57 @@ int main(int argc, char *argv[]) {
     write(sockfd, oBuf, strlen(oBuf));
 
     printf("Waiting....\n");
+
+    char op[50];
+    sscanf(oBuf, " %s", op);
+
     memset(iBuf, 0, MAXDATASIZE);
+
+    //sleep(1);
+    // if (strcmp(op, "login")==0)
+    //   sleep(2);
+
     if ((numbytes = read(sockfd, iBuf, MAXDATASIZE)) > 0) {
       printf("Received [%s] with %d bytes\n", iBuf, numbytes);
+
+      if (strcmp(op, "login") == 0) {
+        if (strlen(usr) == 0) {
+          sscanf(oBuf + 6, " %s", usr);
+        }
+        if (strcmp(iBuf, "Voce esta logado") != 0 &&
+            strcmp(iBuf, "Você já está logado") != 0 &&
+            strcmp(iBuf, "Falha no Login") != 0) {
+          char user[50], msg[160];
+          int p=0;
+          while (sscanf(iBuf+p, "%s %[^\n]s", user, msg) > 1) {
+            FILE *f = fopen(user, "a");
+            if (f != NULL) {
+              fprintf(f, "%s: %s\n", user, msg);
+              p+= strlen(user)+strlen(msg)+2;
+            }
+          }
+        }
+      } else if (strcmp(op, "send") == 0) {
+        if (strlen(usr)) {
+          char user[50], msg[160];
+          sscanf(oBuf + 5, " %s %[^\n]s", user, msg);
+          FILE *f = fopen(user, "a");
+          if (f != NULL) {
+            fprintf(f, "%s: %s\n", usr, msg);
+          }
+        }
+      } else if (strcmp(op, "recive") == 0) {
+        char user[50], msg[160];
+        while (sscanf(iBuf, "%s %[^\n]s", user, msg) > 1) {
+          FILE *f = fopen(user, "a");
+          if (f != NULL) {
+            fprintf(f, "%s: %s\n", user, msg);
+          }
+        }
+      } else if (strcmp(op, "logout") == 0) {
+        strcpy(usr, "");
+      }
+      op[0]=0;
     }
     if (!strcmp(iBuf, "quit")) {
       printf("Connection closed\n");
